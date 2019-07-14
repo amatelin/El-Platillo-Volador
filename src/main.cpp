@@ -28,13 +28,9 @@ DNSServer dnsServer;
 // SYSTEM STATE CONSTANTS
 #define BOOTING "BOOTING"
 #define COLOR_CONTROL_MODE "COLOR_CONTROL_MODE"
-#define RAINBOW_MODE "Rainbow"
-#define OCEAN_MODE "Ocean"
-#define CLOUD_MODE "Cloud"
-#define LAVA_MODE "Lava"
-#define FOREST_MODE "Forest"
+#define ANIMATION_MODE "ANIMATION_MODE"
 #define TEMPERATURE_MODE "TEMPERATURE_MODE"
-#define MUSIC_MODE "MUSIC MODE"
+#define MUSIC_MODE "MUSIC_MODE"
 #define OFF "OFF"
 #define SHUTDOWN "SHUTDOWN"
 const char *LAMP_MODE = BOOTING;
@@ -54,19 +50,21 @@ void turnOnLED();
 void turnOffLED();
 void switchSystem(Control sender, int type);
 void switchLED(Control sender, int type);
-void switchRainbow(Control sender, int type);
+void switchAnimation(Control sender, int type);
 void switchTemperature(Control sender, int type);
+void switchMusic(Control sender, int type);
 void sliderBrightness(Control sender, int type);
 void sliderRGBR(Control sender, int type);
 void sliderRGBG(Control sender, int type);
 void sliderRGBB(Control sender, int type);
-void sliderRainbowSpeed(Control sender, int type);
+void sliderAnimationSpeed(Control sender, int type);
 void colorPalettePad(Control sender, int type);
-void runRainbow();
+void runAnimation();
 void runTemperature();
 void runMusic();
 void measureTemperatureAndHumidity();
 void updateWebData();
+void updateSwitchers();
 void touchCallback();
 void FillLEDsFromPaletteColors(uint8_t);
 void ChangePalettePeriodically();
@@ -128,11 +126,11 @@ CRGBPalette16 colorPalettes[] = {
   ForestColors_p
 };
 const char* colorPalettesNames[] = {
-    RAINBOW_MODE,
-    OCEAN_MODE,
-    CLOUD_MODE,
-    LAVA_MODE,
-    FOREST_MODE
+    "Rainbow",
+    "Ocean",
+    "Cloud",
+    "Lava",
+    "Forest"
 };
 int colorPaletteIndex = 0;
 const char* colorPaletteName= colorPalettesNames[0];
@@ -155,6 +153,11 @@ touch_pad_t touchPin;
 // Objects declarations
 
 void setup() {
+  // Setting default lamp mode
+  // LAMP_MODE = MUSIC_MODE;
+  LAMP_MODE = ANIMATION_MODE;
+  // LAMP_MODE = TEMPERATURE_MODE;
+
   // Initialize serial
   Serial.begin(115200);
   Serial.println("Booting");
@@ -190,11 +193,12 @@ void setup() {
   ESPUI.slider("Color RED Value", &sliderRGBR, COLOR_SUNFLOWER,(String) pixel1Color);
   ESPUI.slider("Color GREEN Value", &sliderRGBG, COLOR_SUNFLOWER,(String) pixel2Color);
   ESPUI.slider("Color BLUE Value", &sliderRGBB, COLOR_SUNFLOWER,(String) pixel3Color);
-  ESPUI.switcher("Animation Mode", (LAMP_MODE==RAINBOW_MODE), &switchRainbow, COLOR_CARROT);
+  ESPUI.switcher("Animation Mode", (LAMP_MODE==ANIMATION_MODE), &switchAnimation, COLOR_CARROT);
   ESPUI.label("Color palette:", COLOR_TURQUOISE,(String) colorPaletteName);
   ESPUI.pad("Change color palette", false, &colorPalettePad, COLOR_TURQUOISE);
-  ESPUI.slider("Animation speed", &sliderRainbowSpeed, COLOR_CARROT,(String) UPDATES_PER_SECOND);
+  ESPUI.slider("Animation speed", &sliderAnimationSpeed, COLOR_CARROT,(String) UPDATES_PER_SECOND);
   ESPUI.switcher("Temperature Mode", (LAMP_MODE==TEMPERATURE_MODE), &switchTemperature, COLOR_CARROT);
+  ESPUI.switcher("Music Mode", (LAMP_MODE==MUSIC_MODE), &switchMusic, COLOR_CARROT);
 
   // Server initialization and start
   dnsServer.start(DNS_PORT, "*", apIP);
@@ -215,10 +219,6 @@ void setup() {
   timer1.start();
   timer2.start();
 
-  // Setting default lamp mode
-  // LAMP_MODE = MUSIC_MODE;
-  LAMP_MODE = RAINBOW_MODE;
-  // LAMP_MODE = TEMPERATURE_MODE;
 
   Serial.println("Booting OK");
 }
@@ -230,7 +230,7 @@ void loop() {
     // run Server
     dnsServer.processNextRequest();
 
-    if (LAMP_MODE == RAINBOW_MODE) runRainbow();
+    if (LAMP_MODE == ANIMATION_MODE) runAnimation();
     if (LAMP_MODE == TEMPERATURE_MODE) runTemperature();
     if (LAMP_MODE == MUSIC_MODE) runMusic();
 
@@ -243,8 +243,15 @@ void loop() {
 void updateWebData() {
   ESPUI.print("Temperature:", (String) temperature);
   ESPUI.print("Humidity:", (String) humidity);
-  ESPUI.print("Color palette:", (String) colorPaletteName);
+  ESPUI.print("Color palette:", colorPaletteName);
 };
+
+void updateSwitchers() {
+  ESPUI.updateSwitcher("Status LEDs", (LAMP_MODE!=OFF));
+  ESPUI.updateSwitcher("Animation Mode", (LAMP_MODE==ANIMATION_MODE));
+  ESPUI.updateSwitcher("Temperature Mode", (LAMP_MODE==TEMPERATURE_MODE));
+  ESPUI.updateSwitcher("Music Mode", (LAMP_MODE==MUSIC_MODE));
+}
 
 void touchCallback() {
   LAMP_MODE = SHUTDOWN;
@@ -309,18 +316,15 @@ void runMusic() {
   averageDelta = deltaSums / SAMPLE_SIZE;
   Serial.println(delta);
   if (delta>averageDelta*1.075 || delta<averageDelta*0.925) {
-    if (delta>deltaMin*1.05 && delta<deltaMax*1.95) {
+    // if (delta>deltaMin*1.05 && delta<deltaMax*1.95) {
       scaleIndex = map(delta, deltaMin, deltaMax*0.8, 0, 17);
 
       for (int i =0; i<NUM_LEDS; i++) {
         leds[i] = equalizerColorSchemes[scaleIndex][i];
       }
       FastLED.show();
-    }
+    // }
   }
-
-
-  // delay(100);
 }
 
 void runTemperature() {
@@ -332,7 +336,7 @@ void runTemperature() {
   FastLED.show();
 }
 
-void runRainbow() {
+void runAnimation() {
   static uint8_t startIndex = 0;
   startIndex = startIndex + 1; /* motion speed */
 
@@ -340,12 +344,11 @@ void runRainbow() {
 
   FastLED.show();
   FastLED.delay(1000 / UPDATES_PER_SECOND);
-
-  ESPUI.updateSwitcher("Status LEDs", true);
 }
 
 void turnOnLED() {
   LAMP_MODE = COLOR_CONTROL_MODE;
+  updateSwitchers();
   for (int i=0; i<NUM_LEDS; i++) {
     leds[i].setRGB(R, G, B);
   }
@@ -355,7 +358,7 @@ void turnOnLED() {
 
 void turnOffLED() {
   LAMP_MODE = OFF;
-  ESPUI.updateSwitcher("Rainbow animation", false);
+  updateSwitchers();
   for (int i=0; i<NUM_LEDS; i++) {
     leds[i] = CRGB::Black;
   }
@@ -421,8 +424,8 @@ void sliderBrightness(Control sender, int type) {
 }
 
 void sliderRGBR(Control sender, int type) {
-  ESPUI.updateSwitcher("Rainbow animation", false);
   LAMP_MODE = COLOR_CONTROL_MODE;
+  updateSwitchers();
   R = (int) sender.value.toInt()*2.55;
   for (int i=0; i<NUM_LEDS; i++) {
     leds[i].setRGB(R, G, B);
@@ -432,8 +435,8 @@ void sliderRGBR(Control sender, int type) {
 }
 
 void sliderRGBG(Control sender, int type) {
-  ESPUI.updateSwitcher("Rainbow animation", false);
   LAMP_MODE = COLOR_CONTROL_MODE;
+  updateSwitchers();
   G = (int) sender.value.toInt()*2.55;
   for (int i=0; i<NUM_LEDS; i++) {
     leds[i].setRGB(R, G, B);
@@ -443,8 +446,8 @@ void sliderRGBG(Control sender, int type) {
 }
 
 void sliderRGBB(Control sender, int type) {
-  ESPUI.updateSwitcher("Rainbow animation", false);
   LAMP_MODE = COLOR_CONTROL_MODE;
+  updateSwitchers();
   B = (int) sender.value.toInt()*2.55;
   for (int i=0; i<NUM_LEDS; i++) {
     leds[i].setRGB(R, G, B);
@@ -453,7 +456,7 @@ void sliderRGBB(Control sender, int type) {
   Serial.println(sender.value);
 }
 
-void sliderRainbowSpeed(Control sender, int type) {
+void sliderAnimationSpeed(Control sender, int type) {
   UPDATES_PER_SECOND = sender.value.toInt();
 }
 
@@ -485,14 +488,15 @@ void switchLED(Control sender, int value) {
   Serial.print(" ");
 }
 
-void switchRainbow(Control sender, int value) {
+void switchAnimation(Control sender, int value) {
   switch (value) {
     case S_ACTIVE:
-      Serial.print("Rainbow Active:");
-      LAMP_MODE = RAINBOW_MODE;
+      Serial.print("Animation Active:");
+      LAMP_MODE = ANIMATION_MODE;
+      updateSwitchers();
       break;
     case S_INACTIVE:
-      Serial.print("Rainbow Inactive");
+      Serial.print("Animation Inactive");
       LAMP_MODE = COLOR_CONTROL_MODE;
       break;
   }
@@ -505,9 +509,26 @@ void switchTemperature(Control sender, int value) {
     case S_ACTIVE:
       Serial.print("Temperature Active:");
       LAMP_MODE = TEMPERATURE_MODE;
+      updateSwitchers();
       break;
     case S_INACTIVE:
       Serial.print("Temperature Inactive");
+      LAMP_MODE = COLOR_CONTROL_MODE;
+      break;
+  }
+  Serial.print(" ");
+  Serial.println(sender.id);
+}
+
+void switchMusic(Control sender, int value) {
+  switch (value) {
+    case S_ACTIVE:
+      Serial.print("Music Active:");
+      LAMP_MODE = MUSIC_MODE;
+      updateSwitchers();
+      break;
+    case S_INACTIVE:
+      Serial.print("Music Inactive");
       LAMP_MODE = COLOR_CONTROL_MODE;
       break;
   }
